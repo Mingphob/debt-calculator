@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Debt Calculator (KDX Rule)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #f9fafb, #e2e8f0);
+    }
+    input:focus {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+  <div class="bg-white w-full max-w-md p-6 rounded-2xl shadow-xl">
+    <h1 class="text-2xl font-bold text-center mb-6 text-blue-600">💰 Debt Calculator (KDX Rule)</h1>
+
+    <div class="space-y-4">
+      <div>
+        <label class="block font-medium">Contract Date</label>
+        <input id="contractDate" type="date" class="w-full border rounded-lg p-2">
+      </div>
+
+      <div>
+        <label class="block font-medium">Due Date</label>
+        <input id="dueDate" type="date" class="w-full border rounded-lg p-2">
+      </div>
+
+      <div>
+        <label class="block font-medium">Paid Date</label>
+        <input id="paidDate" type="date" class="w-full border rounded-lg p-2">
+      </div>
+
+      <div>
+        <label class="block font-medium">Summary Price (฿)</label>
+        <input id="summaryPrice" type="number" class="w-full border rounded-lg p-2" placeholder="e.g. 10000">
+      </div>
+
+      <button
+        onclick="calculateDebt()"
+        class="w-full bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600 active:bg-blue-700">
+        Calculate
+      </button>
+
+      <div id="result" class="mt-6 hidden bg-gray-50 p-4 rounded-lg border">
+        <h2 class="text-lg font-semibold mb-2 text-gray-700">📋 Result</h2>
+        <p><strong>Month Count:</strong> <span id="rMonths"></span></p>
+        <p><strong>Base Interest (24%/yr):</strong> ฿<span id="rInterest"></span></p>
+        <p><strong>Late Interest (5%/yr):</strong> ฿<span id="rLate"></span></p>
+        <p class="text-blue-600 font-semibold text-lg mt-2">
+          <strong>Total Payable:</strong> ฿<span id="rTotal"></span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+ <script>
+  // --- Helper: Month difference between two dates ---
+  function monthDiff(d1, d2) {
+    return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+  }
+
+  // --- Set default Paid Date = Today ---
+  window.onload = function () {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('paidDate').value = today;
+  };
+
+  function calculateDebt() {
+    const cDate = new Date(document.getElementById('contractDate').value);
+    const dDate = new Date(document.getElementById('dueDate').value);
+    const pDateInput = document.getElementById('paidDate');
+    const pDate = pDateInput.value ? new Date(pDateInput.value) : new Date();
+    const price = parseFloat(document.getElementById('summaryPrice').value || 0);
+
+    if (isNaN(price) || !cDate || !dDate) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    // --- Base Interest (24%/yr = 2%/month) ---
+    let monthCount = monthDiff(cDate, pDate);
+    const dueDay = dDate.getDate();
+    const payDay = pDate.getDate();
+
+    // If pay before the due date of that month → don’t count that month
+    if (payDay < dueDay) monthCount -= 1;
+    if (monthCount < 0) monthCount = 0;
+
+    const baseInterestRate = 0.02;
+    const baseInterest = price * baseInterestRate * monthCount;
+    let total = price + baseInterest;
+    let lateInterest = 0;
+
+    // --- Late Interest (5%/yr = 0.4167%/month) ---
+    // Start calculating late interest only if Paid Date > (Due Date + 1 month)
+    const lateStart = new Date(dDate);
+    lateStart.setMonth(lateStart.getMonth() + 1);
+
+    if (pDate > lateStart) {
+      const lateMonths = monthDiff(lateStart, pDate);
+      const lateRate = 0.05 / 12; // per month
+      lateInterest = total * lateRate * (lateMonths + 1);
+      total += lateInterest;
+    }
+
+    // --- Display ---
+    document.getElementById('result').classList.remove('hidden');
+    document.getElementById('rMonths').textContent = monthCount + ' month(s)';
+    document.getElementById('rInterest').textContent = baseInterest.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    document.getElementById('rLate').textContent = lateInterest.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    document.getElementById('rTotal').textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2 });
+  }
+</script>
+
+
+</body>
+</html>
