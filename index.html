@@ -1,20 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Debt Calculator (KDX Rule)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body {
-      background: linear-gradient(135deg, #f9fafb, #e2e8f0);
-    }
-    input:focus {
-      outline: 2px solid #3b82f6;
-      outline-offset: 2px;
-    }
+    body { background: linear-gradient(135deg,#f9fafb,#e2e8f0); }
+    input:focus { outline: 2px solid #3b82f6; outline-offset: 2px; }
   </style>
 </head>
+
 <body class="flex items-center justify-center min-h-screen p-4">
   <div class="bg-white w-full max-w-md p-6 rounded-2xl shadow-xl">
     <h1 class="text-2xl font-bold text-center mb-6 text-blue-600">💰 Debt Calculator (KDX Rule)</h1>
@@ -40,83 +36,90 @@
         <input id="summaryPrice" type="number" class="w-full border rounded-lg p-2" placeholder="e.g. 10000">
       </div>
 
-      <button
-        onclick="calculateDebt()"
-        class="w-full bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600 active:bg-blue-700">
+      <button onclick="calculateDebt()" class="w-full bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600 active:bg-blue-700">
         Calculate
       </button>
 
       <div id="result" class="mt-6 hidden bg-gray-50 p-4 rounded-lg border">
         <h2 class="text-lg font-semibold mb-2 text-gray-700">📋 Result</h2>
-        <p><strong>Month Count:</strong> <span id="rMonths"></span></p>
-        <p><strong>Base Interest (24%/yr):</strong> ฿<span id="rInterest"></span></p>
+        <p><strong>Base Months:</strong> <span id="rBaseMonths"></span></p>
+        <p><strong>Base Amount:</strong> ฿<span id="rBaseAmount"></span></p>
+        <p><strong>Penalty Months:</strong> <span id="rPenaltyMonths"></span></p>
         <p><strong>Late Interest (5%/yr):</strong> ฿<span id="rLate"></span></p>
-        <p class="text-blue-600 font-semibold text-lg mt-2">
-          <strong>Total Payable:</strong> ฿<span id="rTotal"></span>
-        </p>
+        <p class="text-blue-600 font-semibold text-lg mt-2"><strong>Total Payable:</strong> ฿<span id="rTotal"></span></p>
       </div>
     </div>
   </div>
 
- <script>
-  // --- Helper: Month difference between two dates ---
+<script>
   function monthDiff(d1, d2) {
     return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
   }
 
-  // --- Set default Paid Date = Today ---
+  function toDateOnly(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  // default paid date = today
   window.onload = function () {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('paidDate').value = today;
   };
 
   function calculateDebt() {
-    const cDate = new Date(document.getElementById('contractDate').value);
-    const dDate = new Date(document.getElementById('dueDate').value);
-    const pDateInput = document.getElementById('paidDate');
-    const pDate = pDateInput.value ? new Date(pDateInput.value) : new Date();
-    const price = parseFloat(document.getElementById('summaryPrice').value || 0);
+    const cVal = document.getElementById('contractDate').value;
+    const dVal = document.getElementById('dueDate').value;
+    const pVal = document.getElementById('paidDate').value;
+    const summaryPrice = parseFloat(document.getElementById('summaryPrice').value || 0);
 
-    if (isNaN(price) || !cDate || !dDate) {
-      alert('Please fill in all fields');
+    if (!cVal || !dVal || isNaN(summaryPrice)) {
+      alert("Please fill Contract Date, Due Date and Summary Price.");
       return;
     }
 
-    // --- Base Interest (24%/yr = 2%/month) ---
-    let monthCount = monthDiff(cDate, pDate);
-    const dueDay = dDate.getDate();
-    const payDay = pDate.getDate();
+    const contractDate = toDateOnly(new Date(cVal));
+    const dueDate = toDateOnly(new Date(dVal));
+    const paidDate = toDateOnly(new Date(pVal));
 
-    // If pay before the due date of that month → don’t count that month
-    if (payDay < dueDay) monthCount -= 1;
-    if (monthCount < 0) monthCount = 0;
+    // -----------------------------------------
+    // BASE INTEREST (2%) – capped at months(contract → due)
+    // -----------------------------------------
+    let rawBasePaid = monthDiff(contractDate, paidDate);        // actual months paid
+    let rawBaseDue = monthDiff(contractDate, dueDate);          // max months allowed
 
-    const baseInterestRate = 0.02;
-    const baseInterest = price * baseInterestRate * monthCount;
-    let total = price + baseInterest;
-    let lateInterest = 0;
+    let baseMonths = Math.min(
+      Math.max(rawBasePaid, 0),   // cannot be negative
+      rawBaseDue                  // cannot exceed contract → due months
+    );
 
-    // --- Late Interest (5%/yr = 0.4167%/month) ---
-    // Start calculating late interest only if Paid Date > (Due Date + 1 month)
-    const lateStart = new Date(dDate);
-    lateStart.setMonth(lateStart.getMonth() + 1);
+    const baseAmount = summaryPrice + (summaryPrice * 0.02 * baseMonths);
 
-    if (pDate > lateStart) {
-      const lateMonths = monthDiff(lateStart, pDate);
-      const lateRate = 0.05 / 12; // per month
-      lateInterest = total * lateRate * (lateMonths + 1);
-      total += lateInterest;
+    // -----------------------------------------
+    // PENALTY INTEREST (5%/yr) – starts AFTER due+1 month
+    // -----------------------------------------
+    let duePlus1 = new Date(dueDate);
+    duePlus1.setMonth(duePlus1.getMonth() );
+
+    let penaltyMonths = 0;
+    if (paidDate > duePlus1) {
+      penaltyMonths = monthDiff(duePlus1, paidDate);
+      if (penaltyMonths < 0) penaltyMonths = 0;
     }
 
-    // --- Display ---
+    const penaltyInterest = baseAmount * (0.05 / 12) * penaltyMonths;
+
+    const total = baseAmount + penaltyInterest;
+
+    // -----------------------------------------
+    // DISPLAY
+    // -----------------------------------------
     document.getElementById('result').classList.remove('hidden');
-    document.getElementById('rMonths').textContent = monthCount + ' month(s)';
-    document.getElementById('rInterest').textContent = baseInterest.toLocaleString(undefined, { minimumFractionDigits: 2 });
-    document.getElementById('rLate').textContent = lateInterest.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    document.getElementById('rBaseMonths').textContent = baseMonths + " month(s)";
+    document.getElementById('rBaseAmount').textContent = baseAmount.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    document.getElementById('rPenaltyMonths').textContent = penaltyMonths + " month(s)";
+    document.getElementById('rLate').textContent = penaltyInterest.toLocaleString(undefined, { minimumFractionDigits: 2 });
     document.getElementById('rTotal').textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2 });
   }
 </script>
-
-
 </body>
 </html>
