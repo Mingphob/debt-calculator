@@ -1,70 +1,71 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Debt Calculator (KDX Rule)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8">
+  <title>KDX Interest Calculator</title>
   <style>
-    body { background: linear-gradient(135deg,#f9fafb,#e2e8f0); }
-    input:focus { outline: 2px solid #3b82f6; outline-offset: 2px; }
+    body { font-family: Arial; padding: 20px; max-width: 600px; margin: auto; }
+    .hidden { display: none; }
+    .result-box { margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
   </style>
 </head>
 
-<body class="flex items-center justify-center min-h-screen p-4">
-  <div class="bg-white w-full max-w-md p-6 rounded-2xl shadow-xl">
-    <h1 class="text-2xl font-bold text-center mb-6 text-blue-600">💰 Debt Calculator (KDX Rule)</h1>
+<body>
 
-    <div class="space-y-4">
-      <div>
-        <label class="block font-medium">Contract Date</label>
-        <input id="contractDate" type="date" class="w-full border rounded-lg p-2">
-      </div>
+<h2>KDX Interest Calculator</h2>
 
-      <div>
-        <label class="block font-medium">Due Date</label>
-        <input id="dueDate" type="date" class="w-full border rounded-lg p-2">
-      </div>
+<label>Contract Date:</label>
+<input type="date" id="contractDate"><br><br>
 
-      <div>
-        <label class="block font-medium">Paid Date</label>
-        <input id="paidDate" type="date" class="w-full border rounded-lg p-2">
-      </div>
+<label>Due Date:</label>
+<input type="date" id="dueDate"><br><br>
 
-      <div>
-        <label class="block font-medium">Summary Price (฿)</label>
-        <input id="summaryPrice" type="number" class="w-full border rounded-lg p-2" placeholder="e.g. 10000">
-      </div>
+<label>Paid Date:</label>
+<input type="date" id="paidDate"><br><br>
 
-      <button onclick="calculateDebt()" class="w-full bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600 active:bg-blue-700">
-        Calculate
-      </button>
+<label>Summary Price:</label>
+<input type="number" id="summaryPrice"><br><br>
 
-      <div id="result" class="mt-6 hidden bg-gray-50 p-4 rounded-lg border">
-        <h2 class="text-lg font-semibold mb-2 text-gray-700">📋 Result</h2>
-        <p><strong>Base Months:</strong> <span id="rBaseMonths"></span></p>
-        <p><strong>Base Amount:</strong> ฿<span id="rBaseAmount"></span></p>
-        <p><strong>Penalty Months:</strong> <span id="rPenaltyMonths"></span></p>
-        <p><strong>Late Interest (5%/yr):</strong> ฿<span id="rLate"></span></p>
-        <p class="text-blue-600 font-semibold text-lg mt-2"><strong>Total Payable:</strong> ฿<span id="rTotal"></span></p>
-      </div>
-    </div>
-  </div>
+<button onclick="calculateDebt()">Calculate</button>
+
+<div id="result" class="result-box hidden">
+  <p><b>Base Interest:</b> <span id="rBaseMonths"></span></p>
+  <p>Base Amount: <span id="rBaseAmount"></span></p>
+
+  <p><b>Penalty:</b> <span id="rPenaltyMonths"></span></p>
+  <p>Penalty Amount: <span id="rLate"></span></p>
+
+  <hr>
+  <p><b>Total:</b> <span id="rTotal"></span></p>
+</div>
+
 
 <script>
-  function monthDiff(d1, d2) {
-    return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
-  }
-
-  function toDateOnly(d) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  }
-
-  // default paid date = today
+  // ตั้งค่า paid date เป็นวันนี้ทันที
   window.onload = function () {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('paidDate').value = today;
   };
+
+  // --------------------------
+  // ฟังก์ชันนับเดือนปฏิทิน + วันกำกับ (ใช้ทั้ง Base และ Penalty)
+  // --------------------------
+  function countMonthsByCalendarWithDay(d1, d2) {
+    let months = (d2.getFullYear() - d1.getFullYear()) * 12 +
+                 (d2.getMonth() - d1.getMonth());
+
+    // ถ้าวันของปลายทางน้อยกว่า → เดือนยังไม่ถึง
+    if (d2.getDate() < d1.getDate()) {
+      months -= 1;
+    }
+
+    return Math.max(months, 0);
+  }
+
+  // ทำวันที่ให้เป็น date-only
+  function toDateOnly(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
 
   function calculateDebt() {
     const cVal = document.getElementById('contractDate').value;
@@ -82,32 +83,26 @@
     const paidDate = toDateOnly(new Date(pVal));
 
     // -----------------------------------------
-    // BASE INTEREST (2%) – capped at months(contract → due)
+    // BASE INTEREST (2%) — capped at months(contract → due)
     // -----------------------------------------
-    let rawBasePaid = monthDiff(contractDate, paidDate);        // actual months paid
-    let rawBaseDue = monthDiff(contractDate, dueDate);          // max months allowed
+    let rawBasePaid = countMonthsByCalendarWithDay(contractDate, paidDate);
+    let rawBaseDue  = countMonthsByCalendarWithDay(contractDate, dueDate);
 
-    let baseMonths = Math.min(
-      Math.max(rawBasePaid, 0),   // cannot be negative
-      rawBaseDue                  // cannot exceed contract → due months
-    );
-
+    let baseMonths = Math.min(rawBasePaid, rawBaseDue);
     const baseAmount = summaryPrice + (summaryPrice * 0.02 * baseMonths);
 
     // -----------------------------------------
-    // PENALTY INTEREST (5%/yr) – starts AFTER due+1 month
+    // PENALTY (5%/yr) — begins after due + 1 month
     // -----------------------------------------
     let duePlus1 = new Date(dueDate);
-    duePlus1.setMonth(duePlus1.getMonth() );
+    duePlus1.setMonth(duePlus1.getMonth());
 
     let penaltyMonths = 0;
     if (paidDate > duePlus1) {
-      penaltyMonths = monthDiff(duePlus1, paidDate);
-      if (penaltyMonths < 0) penaltyMonths = 0;
+      penaltyMonths = countMonthsByCalendarWithDay(duePlus1, paidDate);
     }
 
     const penaltyInterest = baseAmount * (0.05 / 12) * penaltyMonths;
-
     const total = baseAmount + penaltyInterest;
 
     // -----------------------------------------
@@ -121,5 +116,6 @@
     document.getElementById('rTotal').textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2 });
   }
 </script>
+
 </body>
 </html>
